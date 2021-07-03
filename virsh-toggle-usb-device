@@ -1,0 +1,61 @@
+#!/bin/bash
+if [ "$EUID" -ne 0 ]
+  then echo "Please run as root"
+  exit
+fi
+
+VM="$1"
+
+if test -z "$VM"; then
+    printf "usage: ${0} domain\n"
+    exit 1
+fi
+
+readarray -t DEVICES < <(lsusb)
+COUNT=${#DEVICES[@]}
+
+if [ ${#DEVICES[@]} -eq 0 ]; then
+    printf "No usb devices found\n"
+    exit 0
+fi
+
+printf "Target domain: ${VM}\n"
+printf "Found (${COUNT}) USB device"; [[ ${COUNT} -gt 1 ]] && printf "s"
+printf ". Select a device to toggle passthrough:\n\n"
+for ((i = 0; i < ${#DEVICES[@]}; i++))
+do
+    printf '%-6s' "[${i}]"
+    printf "${DEVICES[$i]}\n"
+done
+
+printf "\nEnter number: "
+read SELECTION
+
+printf "You selected:\n [$SELECTION] ${DEVICES[$SELECTION]}\n\n"
+
+IFS=: read -r VENDOR PRODUCT <<< $(echo ${DEVICES[$SELECTION]} | awk '{print $6}')
+
+XML=$(cat <<EOF
+<hostdev mode='subsystem' type='usb' managed='yes'>
+  <source>
+    <vendor id='0x$VENDOR'/>
+    <product id='0x$PRODUCT'/>
+  </source>
+</hostdev>
+EOF
+)
+TMPFILE="/tmp/usbdev_${VENDOR}_${PRODUCT}.xml"
+echo "$XML" > "${TMPFILE}"
+
+message=$(sudo virsh attach-device "${VM}" "${TMPFILE}" 2>&1)
+
+if [ $? -ne 0 ] && [ grep -o "USB device .* in use by driver QEMU, domain ${VM}" ]; then
+    sudo virsh detach-device "${VM}" "${TMPFILE}"
+else
+    printf "$message\n"
+fi
+
+
+
+
+
