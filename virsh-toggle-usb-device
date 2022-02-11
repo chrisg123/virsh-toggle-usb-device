@@ -4,10 +4,15 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+BGREEN="\033[0;92m"
+NC="\033[0m"
+
 VM="$1"
+shift
+HIGHLIGHT=("$@")
 
 if test -z "$VM"; then
-    printf "usage: ${0} domain\n"
+    printf "usage: ${0} domain [search ...]\n"
     exit 1
 fi
 
@@ -24,8 +29,17 @@ printf "Found (${COUNT}) USB device"; [[ ${COUNT} -gt 1 ]] && printf "s"
 printf ". Select a device to toggle passthrough:\n\n"
 for ((i = 0; i < ${#DEVICES[@]}; i++))
 do
+    if [ -n "${HIGHLIGHT}" ]; then
+        for search in "${HIGHLIGHT[@]}";
+        do
+            if echo "${DEVICES[$i]}" | grep -iq "${search}"; then
+                printf "${BGREEN}"
+                break
+            fi
+        done
+    fi
     printf '%-6s' "[${i}]"
-    printf "${DEVICES[$i]}\n"
+    printf "${DEVICES[$i]}${NC}\n"
 done
 
 printf "\nEnter number: "
@@ -36,7 +50,7 @@ printf "You selected:\n [$SELECTION] ${DEVICES[$SELECTION]}\n\n"
 IFS=: read -r VENDOR PRODUCT <<< $(echo ${DEVICES[$SELECTION]} | awk '{print $6}')
 
 XML=$(cat <<EOF
-<hostdev mode='subsystem' type='usb' managed='yes'>
+<hostdev mode='subsystem' type='usb'>
   <source>
     <vendor id='0x$VENDOR'/>
     <product id='0x$PRODUCT'/>
